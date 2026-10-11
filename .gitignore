@@ -1,0 +1,21 @@
+# Secrets and personal data - NEVER commit these
+credentials.json
+token.json
+config.yaml
+
+# Generated invoices
+output/
+
+# Invoice numbering state
+state.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db

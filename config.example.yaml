@@ -1,0 +1,36 @@
+# Copy this file to config.yaml and fill in your own details.
+# config.yaml is gitignored so your personal info never gets committed.
+
+business:
+  name: Your Name
+  address_line1: 123 Example Street
+  address_line2: "Your City, Province A1B 2C3"
+  country: Canada
+  currency: CAD
+
+invoice:
+  payment_terms_days: 15   # days after the invoice date that payment is due
+  default_rate: 25.00      # your usual hourly rate; editable per invoice
+
+# BILL TO presets. Each one appears in a dropdown on the invoice so you can
+# switch recipients with a click. Add as many as you need.
+recipients:
+  - label: "Example Tutoring Company"
+    name: "Example Tutoring Company"
+    contact_name: "Accounts"
+    email: "billing@example.com"
+    address_line1: "456 Company Ave"
+    address_line2: "Their City, Province X9Y 8Z7"
+    country: "Canada"
+
+  - label: "Private Client"
+    name: "Client Name"
+    contact_name: "Client Name"
+    email: "client@example.com"
+    address_line1: ""
+    address_line2: ""
+    country: ""
+
+# Which Google Calendar to read. "primary" is your main calendar.
+calendar:
+  id: primary

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{{ payload.invoice_title }} - builder</title>
+<style>
+  :root {
+    --ink: #333;
+    --muted: #888;
+    --line: #e5e5e5;
+    --header-bg: #3f3f3f;
+    --accent: #2b6cb0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    color: var(--ink);
+    background: #f0f2f5;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 20px;
+    padding: 20px;
+    align-items: start;
+  }
+
+  /* ---------------- Workbench ---------------- */
+  .workbench {
+    position: sticky;
+    top: 20px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    max-height: calc(100vh - 40px);
+    display: flex;
+    flex-direction: column;
+  }
+  .workbench h2 { font-size: 15px; margin: 0 0 10px; }
+  .controls { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+  .controls input[type="search"],
+  .controls select {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .row-actions { display: flex; gap: 6px; }
+  .row-actions button {
+    flex: 1;
+    padding: 6px 8px;
+    font-size: 12px;
+    border: 1px solid #ccc;
+    background: #fafafa;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .row-actions button:hover { background: #f0f0f0; }
+  .event-list {
+    overflow-y: auto;
+    border-top: 1px solid var(--line);
+    margin-top: 6px;
+    flex: 1;
+  }
+  .event {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .event.hidden { display: none; }
+  .event input { margin-top: 2px; }
+  .event .meta { color: var(--muted); font-size: 11px; }
+  .count-note { font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+  /* ---------------- Invoice sheet (Wave look) ---------------- */
+  .sheet-wrap { display: flex; justify-content: center; }
+  .sheet {
+    background: #fff;
+    width: 8.5in;
+    min-height: 11in;
+    padding: 0.6in 0.7in;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+  }
+  .inv-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .inv-title { font-size: 40px; font-weight: 400; letter-spacing: 1px; margin: 0; }
+  .biz { text-align: right; font-size: 13px; line-height: 1.5; }
+  .biz .name { font-weight: 700; }
+
+  .inv-meta { display: flex; justify-content: space-between; margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .bill-to { font-size: 13px; line-height: 1.5; }
+  .bill-to .label { color: var(--muted); font-size: 11px; letter-spacing: 1px; }
+  .bill-to .name { font-weight: 700; }
+  .meta-right { font-size: 13px; line-height: 1.6; min-width: 260px; }
+  .meta-right .r { display: flex; justify-content: space-between; gap: 16px; }
+  .meta-right .r .k { font-weight: 700; }
+  .meta-right .due { background: #f3f3f3; padding: 4px 8px; margin-top: 4px; font-weight: 700; }
+
+  table.items { width: 100%; border-collapse: collapse; margin-top: 26px; }
+  table.items thead th {
+    background: var(--header-bg);
+    color: #fff;
+    font-size: 13px;
+    text-align: right;
+    padding: 10px 10px;
+    font-weight: 700;
+  }
+  table.items thead th:first-child { text-align: left; }
+  table.items tbody td {
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+    text-align: right;
+    vertical-align: top;
+  }
+  table.items tbody td:first-child { text-align: left; }
+  .li-date { font-weight: 700; }
+  .li-desc { color: var(--ink); }
+  .totals { margin-top: 20px; margin-left: auto; width: 320px; font-size: 14px; }
+  .totals .r { display: flex; justify-content: space-between; padding: 8px 10px; }
+  .totals .total { border-top: 1px solid var(--line); font-weight: 700; }
+  .totals .due { font-weight: 700; }
+  .powered { text-align: center; color: var(--muted); font-size: 12px; margin-top: 60px; }
+
+  [contenteditable="true"] { outline: none; }
+  [contenteditable="true"]:hover { background: #fffbe6; }
+  [contenteditable="true"]:focus { background: #fff3bf; }
+
+  .del-row {
+    border: none; background: transparent; color: #c0392b;
+    cursor: pointer; font-size: 15px; line-height: 1;
+  }
+  .toolbar {
+    grid-column: 1 / -1;
+    display: flex; gap: 10px; align-items: center;
+    background: #fff; border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 4px;
+  }
+  .toolbar .spacer { flex: 1; }
+  .toolbar button {
+    padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; cursor: pointer; font-size: 13px;
+  }
+  .toolbar button.ghost { background: #fff; color: var(--accent); }
+  .hint { font-size: 12px; color: var(--muted); }
+
+  @media print {
+    @page { size: letter; margin: 0; }
+    body { background: #fff; }
+    .app { display: block; padding: 0; }
+    .workbench, .toolbar, .del-row, .add-row-cell,
+    .recipient-picker { display: none !important; }
+    .sheet-wrap { display: block; }
+    .sheet { box-shadow: none; width: auto; min-height: auto; padding: 0.6in 0.7in; }
+    [contenteditable="true"]:hover,
+    [contenteditable="true"]:focus { background: transparent; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <strong>Invoice builder</strong>
+    <span class="hint">Search &amp; tick classes on the left &rarr; edit the invoice &rarr; Export PDF.</span>
+    <span class="spacer"></span>
+    <button class="ghost" onclick="addManualRow()">+ Add blank line</button>
+    <button onclick="window.print()">Export PDF</button>
+  </div>
+
+  <!-- Workbench -->
+  <aside class="workbench">
+    <h2>Classes this month ({{ payload.events | length }})</h2>
+    <div class="controls">
+      <input type="search" id="search" placeholder="Search e.g. 'Siya Advanced'..." oninput="applyFilter()" />
+      <div class="row-actions">
+        <button onclick="selectVisible(true)">Select shown</button>
+        <button onclick="selectVisible(false)">Deselect shown</button>
+      </div>
+    </div>
+    <div class="event-list" id="eventList"></div>
+    <div class="count-note" id="countNote"></div>
+  </aside>
+
+  <!-- Invoice preview -->
+  <div class="sheet-wrap">
+    <div class="sheet">
+      <div class="inv-top">
+        <h1 class="inv-title" contenteditable="true">{{ payload.invoice_title }}</h1>
+        <div class="biz">
+          <div class="name" contenteditable="true">{{ payload.business.name }}</div>
+          <div contenteditable="true">{{ payload.business.address_line1 }}</div>
+          <div contenteditable="true">{{ payload.business.address_line2 }}</div>
+          <div contenteditable="true">{{ payload.business.country }}</div>
+        </div>
+      </div>
+
+      <div class="inv-meta">
+        <div class="bill-to">
+          <div class="label">BILL TO</div>
+          <div class="recipient-picker" style="margin:6px 0;">
+            <select id="recipientPicker" onchange="applyRecipient()" style="font-size:12px;padding:3px;">
+              {% for r in payload.recipients %}
+              <option value="{{ loop.index0 }}">{{ r.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="name" id="rcpName" contenteditable="true"></div>
+          <div id="rcpContact" contenteditable="true"></div>
+          <div id="rcpAddr1" contenteditable="true"></div>
+          <div id="rcpAddr2" contenteditable="true"></div>
+          <div id="rcpEmail" contenteditable="true" style="margin-top:6px;"></div>
+        </div>
+        <div class="meta-right">
+          <div class="r"><span class="k">Invoice Number:</span><span contenteditable="true">{{ payload.invoice_number }}</span></div>
+          <div class="r"><span class="k">Invoice Date:</span><span contenteditable="true">{{ payload.invoice_date }}</span></div>
+          <div class="r"><span class="k">Payment Due:</span><span contenteditable="true">{{ payload.due_date }}</span></div>
+          <div class="r due"><span>Amount Due ({{ payload.currency }}):</span><span id="dueTop">$0.00</span></div>
+        </div>
+      </div>
+
+      <table class="items">
+        <thead>
+          <tr>
+            <th>Items</th>
+            <th>Quantity</th>
+            <th>Price</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody id="itemsBody"></tbody>
+      </table>
+
+      <div class="totals">
+        <div class="r total"><span>Total:</span><span id="grandTotal">$0.00</span></div>
+        <div class="r due"><span>Amount Due ({{ payload.currency }}):</span><span id="dueBottom">$0.00</span></div>
+      </div>
+
+      <div class="powered">Generated from Google Calendar</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const EVENTS = {{ payload.events | tojson }};
+  const RECIPIENTS = {{ payload.recipients | tojson }};
+  const DEFAULT_RATE = {{ payload.default_rate }};
+  const CURRENCY = {{ payload.currency | tojson }};
+
+  function money(n) {
+    return "$" + (Math.round(n * 100) / 100).toFixed(2);
+  }
+  function fmtQty(n) {
+    return (Math.round(n * 100) / 100).toString();
+  }
+
+  const listEl = document.getElementById("eventList");
+  EVENTS.forEach((ev, i) => {
+    const row = document.createElement("label");
+    row.className = "event";
+    row.dataset.idx = i;
+    row.dataset.search = (ev.description + " " + ev.date_label).toLowerCase();
+    row.innerHTML =
+      '<input type="checkbox" onchange="renderInvoice()" />' +
+      '<span><strong>' + escapeHtml(ev.description) + '</strong>' +
+      '<div class="meta">' + escapeHtml(ev.date_label) +
+      ' &middot; ' + fmtQty(ev.quantity) + 'h</div></span>';
+    listEl.appendChild(row);
+  });
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
+  }
+
+  function applyFilter() {
+    const q = document.getElementById("search").value.toLowerCase().trim();
+    document.querySelectorAll(".event").forEach(row => {
+      const match = !q || row.dataset.search.includes(q);
+      row.classList.toggle("hidden", !match);
+    });
+    updateCount();
+  }
+
+  function selectVisible(state) {
+    document.querySelectorAll(".event:not(.hidden) input").forEach(cb => {
+      cb.checked = state;
+    });
+    renderInvoice();
+  }
+
+  function updateCount() {
+    const total = EVENTS.length;
+    const shown = document.querySelectorAll(".event:not(.hidden)").length;
+    const sel = document.querySelectorAll(".event input:checked").length;
+    document.getElementById("countNote").textContent =
+      sel + " selected \u00b7 " + shown + " shown \u00b7 " + total + " total";
+  }
+
+  const manualRows = [];
+
+  function renderInvoice() {
+    const body = document.getElementById("itemsBody");
+    body.innerHTML = "";
+    let total = 0;
+
+    const selected = [];
+    document.querySelectorAll(".event input:checked").forEach(cb => {
+      const idx = cb.closest(".event").dataset.idx;
+      const ev = EVENTS[idx];
+      selected.push({ date: ev.date_label, desc: ev.description, qty: ev.quantity, rate: ev.rate });
+    });
+
+    const all = selected.concat(manualRows);
+    all.forEach((item, i) => {
+      const amount = item.qty * item.rate;
+      total += amount;
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td><span class="li-date" contenteditable="true">' + escapeHtml(item.date) + '</span>' +
+        '<div class="li-desc" contenteditable="true">' + escapeHtml(item.desc) + '</div></td>' +
+        '<td contenteditable="true" oninput="onCellEdit()">' + fmtQty(item.qty) + '</td>' +
+        '<td contenteditable="true" oninput="onCellEdit()">' + money(item.rate) + '</td>' +
+        '<td class="amt">' + money(amount) +
+        ' <button class="del-row" title="Remove" onclick="removeRow(this)">&times;</button></td>';
+      body.appendChild(tr);
+    });
+
+    document.getElementById("grandTotal").textContent = money(total);
+    document.getElementById("dueTop").textContent = money(total);
+    document.getElementById("dueBottom").textContent = money(total);
+    updateCount();
+  }
+
+  function onCellEdit() {
+    let total = 0;
+    document.querySelectorAll("#itemsBody tr").forEach(tr => {
+      const qty = parseFloat(tr.children[1].textContent.replace(/[^0-9.\-]/g, "")) || 0;
+      const rate = parseFloat(tr.children[2].textContent.replace(/[^0-9.\-]/g, "")) || 0;
+      const amount = qty * rate;
+      total += amount;
+      tr.querySelector(".amt").childNodes[0].nodeValue = money(amount) + " ";
+    });
+    document.getElementById("grandTotal").textContent = money(total);
+    document.getElementById("dueTop").textContent = money(total);
+    document.getElementById("dueBottom").textContent = money(total);
+  }
+
+  function removeRow(btn) {
+    btn.closest("tr").remove();
+    onCellEdit();
+  }
+
+  function addManualRow() {
+    manualRows.push({ date: "Date", desc: "Description", qty: 1, rate: DEFAULT_RATE });
+    renderInvoice();
+  }
+
+  function applyRecipient() {
+    const r = RECIPIENTS[document.getElementById("recipientPicker").value];
+    document.getElementById("rcpName").textContent = r.name || "";
+    document.getElementById("rcpContact").textContent = r.contact_name || "";
+    document.getElementById("rcpAddr1").textContent = r.address_line1 || "";
+    document.getElementById("rcpAddr2").textContent = r.address_line2 || "";
+    document.getElementById("rcpEmail").textContent = r.email || "";
+  }
+
+  applyRecipient();
+  renderInvoice();
+</script>
+</body>
+</html>
