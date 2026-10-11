@@ -2,7 +2,7 @@
 
 I tutor on the side, and every month I had to make invoices for the classes I
 taught. That meant opening Google Calendar, going through the whole month,
-finding every class, and manually typing each one into Wave as a line item:
+finding every class, and manually typing each one into an application like [Wave](https://www.waveapps.com/) as a line item:
 the date, the student, how long the class was, the rate. It took me around 30
 minutes each month and it was tedious and easy to get wrong.
 
