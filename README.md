@@ -134,3 +134,8 @@ shows only the clean invoice.
   dialog and leave the margins at default.
 - `config.yaml`, `credentials.json`, and `token.json` hold personal or secret
   information and are gitignored. Don't commit or share them.
+
+## License
+
+This project is released under the [MIT License](LICENSE), so anyone is free to
+use, modify, and share it.
