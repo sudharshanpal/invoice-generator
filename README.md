@@ -37,7 +37,11 @@ On that page you:
 2. Pick who to bill from a dropdown.
 3. Change anything you need by clicking on it: the rate, a date, a
    description, the invoice number. The total updates as you go.
-4. Click **Export PDF** and save it. Done.
+4. Need a line that isn't on your calendar? Click **+ Add blank row** and fill
+   in the date, description, quantity, and price yourself. Add as many as you
+   like. Adding a row or ticking another class never clears what you've
+   already typed.
+5. Click **Export PDF** and save it. Done.
 
 The length of each class comes straight from the event's start and end times,
 so a one-hour class shows as quantity 1 and a 90-minute class shows as 1.5, at

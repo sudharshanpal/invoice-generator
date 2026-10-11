@@ -128,9 +128,13 @@
   .totals .due { font-weight: 700; }
   .powered { text-align: center; color: var(--muted); font-size: 12px; margin-top: 60px; }
 
-  [contenteditable="true"] { outline: none; }
+  [contenteditable="true"] { outline: none; min-height: 1em; }
   [contenteditable="true"]:hover { background: #fffbe6; }
   [contenteditable="true"]:focus { background: #fff3bf; }
+  [contenteditable="true"]:empty::before {
+    content: attr(data-placeholder);
+    color: #bbb;
+  }
 
   .del-row {
     border: none; background: transparent; color: #c0392b;
@@ -169,9 +173,9 @@
   <!-- Toolbar -->
   <div class="toolbar">
     <strong>Invoice builder</strong>
-    <span class="hint">Search &amp; tick classes on the left &rarr; edit the invoice &rarr; Export PDF.</span>
+    <span class="hint">Tick classes on the left, or add your own rows &rarr; edit &rarr; Export PDF.</span>
     <span class="spacer"></span>
-    <button class="ghost" onclick="addManualRow()">+ Add blank line</button>
+    <button class="ghost" onclick="addManualRow()">+ Add blank row</button>
     <button onclick="window.print()">Export PDF</button>
   </div>
 
@@ -242,8 +246,6 @@
         <div class="r total"><span>Total:</span><span id="grandTotal">$0.00</span></div>
         <div class="r due"><span>Amount Due ({{ payload.currency }}):</span><span id="dueBottom">$0.00</span></div>
       </div>
-
-      <div class="powered">Generated from Google Calendar</div>
     </div>
   </div>
 </div>
@@ -305,38 +307,36 @@
       sel + " selected \u00b7 " + shown + " shown \u00b7 " + total + " total";
   }
 
-  const manualRows = [];
+  // Build one invoice row. Manual rows are tagged so a re-render leaves them.
+  function makeRow(date, desc, qty, rate, isManual) {
+    const amount = qty * rate;
+    const tr = document.createElement("tr");
+    if (isManual) tr.dataset.manual = "1";
+    tr.innerHTML =
+      '<td><span class="li-date" contenteditable="true" data-placeholder="Date">' + escapeHtml(date) + '</span>' +
+      '<div class="li-desc" contenteditable="true" data-placeholder="Description">' + escapeHtml(desc) + '</div></td>' +
+      '<td contenteditable="true" oninput="onCellEdit()">' + fmtQty(qty) + '</td>' +
+      '<td contenteditable="true" oninput="onCellEdit()">' + money(rate) + '</td>' +
+      '<td class="amt">' + money(amount) +
+      ' <button class="del-row" title="Remove" onclick="removeRow(this)">&times;</button></td>';
+    return tr;
+  }
 
+  // Rebuild the event rows from the current selection, but keep any manual
+  // rows (and whatever has been typed into them) exactly as they are.
   function renderInvoice() {
     const body = document.getElementById("itemsBody");
+    const manual = Array.from(body.querySelectorAll('tr[data-manual="1"]'));
     body.innerHTML = "";
-    let total = 0;
 
-    const selected = [];
     document.querySelectorAll(".event input:checked").forEach(cb => {
-      const idx = cb.closest(".event").dataset.idx;
-      const ev = EVENTS[idx];
-      selected.push({ date: ev.date_label, desc: ev.description, qty: ev.quantity, rate: ev.rate });
+      const ev = EVENTS[cb.closest(".event").dataset.idx];
+      body.appendChild(makeRow(ev.date_label, ev.description, ev.quantity, ev.rate, false));
     });
 
-    const all = selected.concat(manualRows);
-    all.forEach((item, i) => {
-      const amount = item.qty * item.rate;
-      total += amount;
-      const tr = document.createElement("tr");
-      tr.innerHTML =
-        '<td><span class="li-date" contenteditable="true">' + escapeHtml(item.date) + '</span>' +
-        '<div class="li-desc" contenteditable="true">' + escapeHtml(item.desc) + '</div></td>' +
-        '<td contenteditable="true" oninput="onCellEdit()">' + fmtQty(item.qty) + '</td>' +
-        '<td contenteditable="true" oninput="onCellEdit()">' + money(item.rate) + '</td>' +
-        '<td class="amt">' + money(amount) +
-        ' <button class="del-row" title="Remove" onclick="removeRow(this)">&times;</button></td>';
-      body.appendChild(tr);
-    });
+    manual.forEach(tr => body.appendChild(tr));
 
-    document.getElementById("grandTotal").textContent = money(total);
-    document.getElementById("dueTop").textContent = money(total);
-    document.getElementById("dueBottom").textContent = money(total);
+    onCellEdit();
     updateCount();
   }
 
@@ -360,8 +360,9 @@
   }
 
   function addManualRow() {
-    manualRows.push({ date: "Date", desc: "Description", qty: 1, rate: DEFAULT_RATE });
-    renderInvoice();
+    const body = document.getElementById("itemsBody");
+    body.appendChild(makeRow("", "", 1, DEFAULT_RATE, true));
+    onCellEdit();
   }
 
   function applyRecipient() {
