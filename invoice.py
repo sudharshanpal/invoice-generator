@@ -1,8 +1,9 @@
-"""Command-line entry point: fetch a month of events and build the invoice page.
+"""Command-line entry point: fetch events for a month or range and build the page.
 
 Examples:
     python invoice.py --month september --year 2026
     python invoice.py --month 9
+    python invoice.py --month september-december --year 2026
     python invoice.py --set-number 6
 """
 
@@ -17,7 +18,7 @@ import webbrowser
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from calendar_client import fetch_events_for_month
+from calendar_client import fetch_events_for_range
 from invoice_model import (
     build_page_payload,
     peek_next_invoice_number,
@@ -51,6 +52,25 @@ def parse_month(value: str) -> int:
     raise argparse.ArgumentTypeError(f"unrecognized month: {value}")
 
 
+def parse_month_range(value: str, start_year: int):
+    """Parse '--month' into (start_year, start_month, end_year, end_month).
+
+    Accepts a single month ('september') or a range ('september-december').
+    If the end month is not after the start month, the range is assumed to
+    roll into the next year (e.g. 'november-february').
+    """
+    parts = [p for p in value.replace("..", "-").split("-") if p.strip()]
+    if len(parts) == 1:
+        m = parse_month(parts[0])
+        return start_year, m, start_year, m
+    if len(parts) == 2:
+        start_m = parse_month(parts[0])
+        end_m = parse_month(parts[1])
+        end_year = start_year if end_m >= start_m else start_year + 1
+        return start_year, start_m, end_year, end_m
+    raise argparse.ArgumentTypeError(f"could not parse month range: {value}")
+
+
 def load_config() -> dict:
     if not os.path.exists(CONFIG_FILE):
         sys.exit(f"Config not found: {CONFIG_FILE}")
@@ -69,7 +89,9 @@ def render_page(payload: dict) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build an invoice from Google Calendar.")
-    parser.add_argument("--month", help="Month name or number (e.g. september or 9).")
+    parser.add_argument("--month",
+                        help="Month or range, e.g. 'september', '9', or "
+                             "'september-december'.")
     parser.add_argument("--year", type=int, default=dt.date.today().year,
                         help="Year (defaults to current year).")
     parser.add_argument("--set-number", type=int,
@@ -86,22 +108,34 @@ def main() -> None:
     if not args.month:
         parser.error("--month is required (unless using --set-number).")
 
-    month = parse_month(args.month)
-    year = args.year
+    start_year, start_month, end_year, end_month = parse_month_range(
+        args.month, args.year
+    )
 
     config = load_config()
     calendar_id = config.get("calendar", {}).get("id", "primary")
 
-    print(f"Fetching events for {dt.date(year, month, 1):%B %Y} ...")
-    events = fetch_events_for_month(year, month, calendar_id)
+    start_label = f"{dt.date(start_year, start_month, 1):%B %Y}"
+    end_label = f"{dt.date(end_year, end_month, 1):%B %Y}"
+    span = start_label if start_label == end_label else f"{start_label} - {end_label}"
+    print(f"Fetching events for {span} ...")
+    events = fetch_events_for_range(
+        start_year, start_month, end_year, end_month, calendar_id
+    )
     print(f"  found {len(events)} event(s).")
 
-    payload = build_page_payload(events, config, year, month)
+    payload = build_page_payload(
+        events, config, start_year, start_month, end_year, end_month
+    )
 
     html = render_page(payload)
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    out_name = f"invoice-{year}-{month:02d}.html"
+    if (start_year, start_month) == (end_year, end_month):
+        out_name = f"invoice-{start_year}-{start_month:02d}.html"
+    else:
+        out_name = (f"invoice-{start_year}-{start_month:02d}"
+                    f"_to_{end_year}-{end_month:02d}.html")
     out_path = os.path.join(OUTPUT_DIR, out_name)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)

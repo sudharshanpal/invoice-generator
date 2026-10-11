@@ -83,10 +83,21 @@ def _parse_dt(value: dict) -> dt.datetime:
 def fetch_events_for_month(
     year: int, month: int, calendar_id: str = "primary"
 ) -> list[CalendarEvent]:
+    return fetch_events_for_range(year, month, year, month, calendar_id)
+
+
+def fetch_events_for_range(
+    start_year: int,
+    start_month: int,
+    end_year: int,
+    end_month: int,
+    calendar_id: str = "primary",
+) -> list[CalendarEvent]:
     creds = _get_credentials()
     service = build("calendar", "v3", credentials=creds)
 
-    time_min, time_max = _month_bounds(year, month)
+    time_min, _ = _month_bounds(start_year, start_month)
+    _, time_max = _month_bounds(end_year, end_month)
 
     events: list[CalendarEvent] = []
     page_token = None

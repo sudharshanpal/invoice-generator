@@ -59,30 +59,44 @@ def _long_date(d: dt.date) -> str:
     return d.strftime("%B ") + str(d.day) + f", {d.year}"
 
 
+def _month_end(year: int, month: int) -> dt.date:
+    if month == 12:
+        first_of_next = dt.date(year + 1, 1, 1)
+    else:
+        first_of_next = dt.date(year, month + 1, 1)
+    return first_of_next - dt.timedelta(days=1)
+
+
 def build_page_payload(
     events: list[CalendarEvent],
     config: dict,
-    year: int,
-    month: int,
+    start_year: int,
+    start_month: int,
+    end_year: int | None = None,
+    end_month: int | None = None,
 ) -> dict:
+    if end_year is None:
+        end_year = start_year
+    if end_month is None:
+        end_month = start_month
+
     default_rate = float(config["invoice"].get("default_rate", 25.00))
     terms_days = int(config["invoice"].get("payment_terms_days", 15))
 
-    # Default the invoice date to the last day of the billed month.
-    if month == 12:
-        next_month = dt.date(year + 1, 1, 1)
-    else:
-        next_month = dt.date(year, month + 1, 1)
-    invoice_date = next_month - dt.timedelta(days=1)
+    # Invoice date is the last day of the final billed month.
+    invoice_date = _month_end(end_year, end_month)
     due_date = invoice_date + dt.timedelta(days=terms_days)
 
-    month_name = dt.date(year, month, 1).strftime("%B").upper()
+    start_name = dt.date(start_year, start_month, 1).strftime("%B").upper()
+    end_name = dt.date(end_year, end_month, 1).strftime("%B").upper()
+    is_range = (start_year, start_month) != (end_year, end_month)
+    title_span = f"{start_name}\u2013{end_name}" if is_range else start_name
 
     return {
         "business": config["business"],
         "recipients": config["recipients"],
         "currency": config["business"].get("currency", "CAD"),
-        "invoice_title": f"{month_name} INVOICE",
+        "invoice_title": f"{title_span} INVOICE",
         "invoice_number": peek_next_invoice_number(),
         "invoice_date": _long_date(invoice_date),
         "due_date": _long_date(due_date),

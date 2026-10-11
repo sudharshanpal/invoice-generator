@@ -18,7 +18,13 @@ Run one command for the month you want:
 python invoice.py --month september --year 2026
 ```
 
-It pulls every event from your Google Calendar for that month and opens a page
+You can also bill a range of months in one invoice:
+
+```
+python invoice.py --month september-december --year 2026
+```
+
+It pulls every event from your Google Calendar for that month (or range) and opens a page
 in your browser with two halves:
 
 - **Left:** a list of every class that month, with a search box.
@@ -89,7 +95,13 @@ python invoice.py --month september --year 2026
 ```
 
 - `--month` takes a name or a number (`--month 9` or `--month sep` both work).
-- `--year` is optional and defaults to the current year.
+- `--month` also takes a range with a dash, like `september-december` or
+  `9-12`, to put several months on one invoice. If the end month is earlier
+  than the start (for example `november-february`), it rolls into the next
+  year automatically. The invoice is then titled by its span (for example
+  "SEPTEMBER–DECEMBER INVOICE") and dated to the end of the last month.
+- `--year` is optional and defaults to the current year. For a range, it's the
+  year the range starts in.
 
 The invoice number is remembered between runs and goes up automatically. You
 can also set it directly:
