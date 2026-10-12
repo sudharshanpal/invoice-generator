@@ -176,6 +176,7 @@
     <span class="hint">Tick classes on the left, or add your own rows &rarr; edit &rarr; Export PDF.</span>
     <span class="spacer"></span>
     <button class="ghost" onclick="addManualRow()">+ Add blank row</button>
+    <button class="ghost" onclick="exportCsv()">Download spreadsheet</button>
     <button onclick="window.print()">Export PDF</button>
   </div>
 
@@ -223,9 +224,9 @@
           <div id="rcpEmail" contenteditable="true" style="margin-top:6px;"></div>
         </div>
         <div class="meta-right">
-          <div class="r"><span class="k">Invoice Number:</span><span contenteditable="true">{{ payload.invoice_number }}</span></div>
-          <div class="r"><span class="k">Invoice Date:</span><span contenteditable="true">{{ payload.invoice_date }}</span></div>
-          <div class="r"><span class="k">Payment Due:</span><span contenteditable="true">{{ payload.due_date }}</span></div>
+          <div class="r"><span class="k">Invoice Number:</span><span id="invNumber" contenteditable="true">{{ payload.invoice_number }}</span></div>
+          <div class="r"><span class="k">Invoice Date:</span><span id="invDate" contenteditable="true">{{ payload.invoice_date }}</span></div>
+          <div class="r"><span class="k">Payment Due:</span><span id="invDue" contenteditable="true">{{ payload.due_date }}</span></div>
           <div class="r due"><span>Amount Due ({{ payload.currency }}):</span><span id="dueTop">$0.00</span></div>
         </div>
       </div>
@@ -363,6 +364,59 @@
     const body = document.getElementById("itemsBody");
     body.appendChild(makeRow("", "", 1, DEFAULT_RATE, true));
     onCellEdit();
+  }
+
+  // Wrap a value for CSV: quote it and double any inner quotes.
+  function csvCell(value) {
+    const s = String(value == null ? "" : value);
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  function csvRow(cells) {
+    return cells.map(csvCell).join(",");
+  }
+  function cellNumber(text) {
+    return parseFloat(String(text).replace(/[^0-9.\-]/g, "")) || 0;
+  }
+
+  // Export the current invoice (selected + manual rows, edits, totals) to CSV.
+  function exportCsv() {
+    const txt = id => (document.getElementById(id)?.textContent || "").trim();
+
+    const lines = [];
+    lines.push(csvRow(["Invoice Number", txt("invNumber")]));
+    lines.push(csvRow(["Invoice Date", txt("invDate")]));
+    lines.push(csvRow(["Payment Due", txt("invDue")]));
+    lines.push(csvRow(["Bill To", txt("rcpName")]));
+    lines.push(csvRow(["Email", txt("rcpEmail")]));
+    lines.push("");
+    lines.push(csvRow(["Date", "Description", "Quantity", "Price", "Amount"]));
+
+    let total = 0;
+    document.querySelectorAll("#itemsBody tr").forEach(tr => {
+      const date = (tr.querySelector(".li-date")?.textContent || "").trim();
+      const desc = (tr.querySelector(".li-desc")?.textContent || "").trim();
+      const qty = cellNumber(tr.children[1].textContent);
+      const rate = cellNumber(tr.children[2].textContent);
+      const amount = qty * rate;
+      total += amount;
+      lines.push(csvRow([date, desc, qty, rate.toFixed(2), amount.toFixed(2)]));
+    });
+
+    lines.push("");
+    lines.push(csvRow(["", "", "", "Total", total.toFixed(2)]));
+    lines.push(csvRow(["", "", "", "Amount Due (" + CURRENCY + ")", total.toFixed(2)]));
+
+    // Prefix a BOM so Excel reads UTF-8 (accents, en-dash) correctly.
+    const blob = new Blob(["\uFEFF" + lines.join("\r\n")],
+                          { type: "text/csv;charset=utf-8;" });
+    const title = (txt("invNumber") ? "invoice-" + txt("invNumber") : "invoice");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = title.replace(/[^\w.-]+/g, "_") + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
   }
 
   function applyRecipient() {

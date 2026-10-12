@@ -43,6 +43,13 @@ On that page you:
    already typed.
 5. Click **Export PDF** and save it. Done.
 
+If you'd rather have the data in a spreadsheet, click **Download spreadsheet**
+instead (or as well). It saves a CSV of exactly what's on the invoice right
+then: the selected and manual rows with their dates, descriptions, quantities,
+prices, and amounts, plus the invoice number, dates, recipient, and totals.
+The file opens straight in Excel and imports cleanly into Google Sheets
+(File → Import → Upload), which is handy for your own records or taxes.
+
 The length of each class comes straight from the event's start and end times,
 so a one-hour class shows as quantity 1 and a 90-minute class shows as 1.5, at
 your hourly rate. You don't have to write the duration anywhere.
