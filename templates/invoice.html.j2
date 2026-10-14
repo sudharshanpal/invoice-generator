@@ -176,7 +176,7 @@
     <span class="hint">Tick classes on the left, or add your own rows &rarr; edit &rarr; Export PDF.</span>
     <span class="spacer"></span>
     <button class="ghost" onclick="addManualRow()">+ Add blank row</button>
-    <button class="ghost" onclick="exportCsv()">Download spreadsheet</button>
+    <button class="ghost" onclick="exportXls()">Download spreadsheet</button>
     <button onclick="window.print()">Export PDF</button>
   </div>
 
@@ -366,57 +366,112 @@
     onCellEdit();
   }
 
-  // Wrap a value for CSV: quote it and double any inner quotes.
-  function csvCell(value) {
-    const s = String(value == null ? "" : value);
-    return '"' + s.replace(/"/g, '""') + '"';
-  }
-  function csvRow(cells) {
-    return cells.map(csvCell).join(",");
-  }
   function cellNumber(text) {
     return parseFloat(String(text).replace(/[^0-9.\-]/g, "")) || 0;
   }
-
-  // Export the current invoice (selected + manual rows, edits, totals) to CSV.
-  function exportCsv() {
-    const txt = id => (document.getElementById(id)?.textContent || "").trim();
-
-    const lines = [];
-    lines.push(csvRow(["Invoice Number", txt("invNumber")]));
-    lines.push(csvRow(["Invoice Date", txt("invDate")]));
-    lines.push(csvRow(["Payment Due", txt("invDue")]));
-    lines.push(csvRow(["Bill To", txt("rcpName")]));
-    lines.push(csvRow(["Email", txt("rcpEmail")]));
-    lines.push("");
-    lines.push(csvRow(["Date", "Description", "Quantity", "Price", "Amount"]));
-
-    let total = 0;
-    document.querySelectorAll("#itemsBody tr").forEach(tr => {
-      const date = (tr.querySelector(".li-date")?.textContent || "").trim();
-      const desc = (tr.querySelector(".li-desc")?.textContent || "").trim();
-      const qty = cellNumber(tr.children[1].textContent);
-      const rate = cellNumber(tr.children[2].textContent);
-      const amount = qty * rate;
-      total += amount;
-      lines.push(csvRow([date, desc, qty, rate.toFixed(2), amount.toFixed(2)]));
-    });
-
-    lines.push("");
-    lines.push(csvRow(["", "", "", "Total", total.toFixed(2)]));
-    lines.push(csvRow(["", "", "", "Amount Due (" + CURRENCY + ")", total.toFixed(2)]));
-
-    // Prefix a BOM so Excel reads UTF-8 (accents, en-dash) correctly.
-    const blob = new Blob(["\uFEFF" + lines.join("\r\n")],
-                          { type: "text/csv;charset=utf-8;" });
-    const title = (txt("invNumber") ? "invoice-" + txt("invNumber") : "invoice");
+  function xmlEscape(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function triggerDownload(blob, filename) {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = title.replace(/[^\w.-]+/g, "_") + ".csv";
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
+  }
+
+  // Export to a formatted spreadsheet. We emit SpreadsheetML (the single-file
+  // XML workbook format Excel and Google Sheets both open), which carries
+  // styling, column widths, currency formats, and live formulas - none of
+  // which plain CSV can hold - with no external library.
+  function exportXls() {
+    const txt = id => (document.getElementById(id)?.textContent || "").trim();
+
+    const sCell = (text, style) =>
+      '<Cell' + (style ? ' ss:StyleID="' + style + '"' : '') +
+      '><Data ss:Type="String">' + xmlEscape(text) + '</Data></Cell>';
+    const nCell = (num, style) =>
+      '<Cell' + (style ? ' ss:StyleID="' + style + '"' : '') +
+      '><Data ss:Type="Number">' + num + '</Data></Cell>';
+    const fCell = (formula, style) =>
+      '<Cell ss:Formula="' + xmlEscape(formula) + '"' +
+      (style ? ' ss:StyleID="' + style + '"' : '') +
+      '><Data ss:Type="Number">0</Data></Cell>';
+    const row = inner => '<Row>' + inner + '</Row>';
+
+    const meta = [
+      ["Invoice Number", txt("invNumber")],
+      ["Invoice Date", txt("invDate")],
+      ["Payment Due", txt("invDue")],
+      ["Bill To", txt("rcpName")],
+      ["Email", txt("rcpEmail")],
+    ].map(([k, v]) => row(sCell(k, "label") + sCell(v))).join("");
+
+    // Collect the invoice rows. First data row sits at spreadsheet row 9
+    // (5 meta rows + 1 blank + 1 header + 1-based indexing), which the
+    // per-row and total formulas reference.
+    const headerRowIndex = 8;
+    const firstDataRow = headerRowIndex + 1;
+    const trs = document.querySelectorAll("#itemsBody tr");
+    let bodyRows = "";
+    trs.forEach((tr, i) => {
+      const r = firstDataRow + i;
+      const date = (tr.querySelector(".li-date")?.textContent || "").trim();
+      const desc = (tr.querySelector(".li-desc")?.textContent || "").trim();
+      const qty = cellNumber(tr.children[1].textContent);
+      const rate = cellNumber(tr.children[2].textContent);
+      bodyRows += row(
+        sCell(date) + sCell(desc) + nCell(qty) + nCell(rate, "money") +
+        fCell("=RC[-2]*RC[-1]", "money")   // Amount = Quantity * Price
+      );
+    });
+
+    const header = row(
+      sCell("Date", "head") + sCell("Description", "head") +
+      sCell("Quantity", "head") + sCell("Price", "head") + sCell("Amount", "head")
+    );
+
+    const lastDataRow = firstDataRow + trs.length - 1;
+    const sumRange = trs.length
+      ? "=SUM(R" + firstDataRow + "C5:R" + lastDataRow + "C5)"
+      : "=0";
+    const totalRow = row(
+      sCell("") + sCell("") + sCell("") + sCell("Total", "labelR") +
+      fCell(sumRange, "moneyBold"));
+    const dueRow = row(
+      sCell("") + sCell("") + sCell("") +
+      sCell("Amount Due (" + CURRENCY + ")", "labelR") +
+      fCell("=R" + (lastDataRow + 1) + "C5", "moneyBold"));
+
+    const moneyFmt = "&quot;$&quot;#,##0.00";
+    const xml =
+      '<?xml version="1.0"?>' +
+      '<?mso-application progid="Excel.Sheet"?>' +
+      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
+      'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+      '<Styles>' +
+        '<Style ss:ID="label"><Font ss:Bold="1"/></Style>' +
+        '<Style ss:ID="labelR"><Font ss:Bold="1"/>' +
+          '<Alignment ss:Horizontal="Right"/></Style>' +
+        '<Style ss:ID="head"><Font ss:Bold="1" ss:Color="#FFFFFF"/>' +
+          '<Interior ss:Color="#3F3F3F" ss:Pattern="Solid"/></Style>' +
+        '<Style ss:ID="money"><NumberFormat ss:Format="' + moneyFmt + '"/></Style>' +
+        '<Style ss:ID="moneyBold"><Font ss:Bold="1"/>' +
+          '<NumberFormat ss:Format="' + moneyFmt + '"/></Style>' +
+      '</Styles>' +
+      '<Worksheet ss:Name="Invoice"><Table>' +
+        '<Column ss:Width="90"/><Column ss:Width="220"/>' +
+        '<Column ss:Width="70"/><Column ss:Width="80"/><Column ss:Width="90"/>' +
+        meta + row("") + header + bodyRows + row("") + totalRow + dueRow +
+      '</Table></Worksheet></Workbook>';
+
+    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const base = txt("invNumber") ? "invoice-" + txt("invNumber") : "invoice";
+    triggerDownload(blob, base.replace(/[^\w.-]+/g, "_") + ".xls");
   }
 
   function applyRecipient() {
